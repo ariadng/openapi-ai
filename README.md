@@ -2,11 +2,13 @@
 
 Generate function tools from OpenAPI server that can be used with LLM AI agents.
 
-## Project Roadmap
+## Project Checklist
 
 - ✅ Generate python functions from OpenAPI server endpoints
 - Generate function tools for OpenAPI Agent SDK
 - Generate function tools for Google ADK
+- Integrate pydantic for better typings
+- Support for endpoints with multiple path parameters
 
 ## Installation
 
