@@ -1,4 +1,3 @@
-
 """
 Functions generator for OpenAPI endpoints.
 
@@ -9,12 +8,109 @@ from __future__ import annotations
 
 import types
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
 from urllib.parse import urljoin
 
+from pydantic import BaseModel, Field, create_model
 import requests
 
 from .loader import load_spec, to_snake
+
+def _openapi_to_python_type(openapi_types: List[str]) -> str:
+    # if no types provided, fallback to Any
+    if not openapi_types:
+        return "Any"
+    # map OpenAPI types to Python type annotations
+    type_map = {
+        "string": "str",
+        "integer": "int",
+        "number": "float",
+        "boolean": "bool",
+        "array": "List[Any]",
+        "object": "Dict[str, Any]",
+        "null": "None",
+    }
+    python_types = []
+    for t in openapi_types:
+        python_types.append(type_map.get(t, "Any"))
+    # remove duplicates while preserving order
+    unique_types = []
+    for t in python_types:
+        if t not in unique_types:
+            unique_types.append(t)
+    # if mapping produced no types, fallback to Any
+    if not unique_types:
+        return "Any"
+
+    if len(unique_types) == 1:
+        return unique_types[0]
+
+    return f"Union[{', '.join(unique_types)}]"
+
+
+def generate_components(spec: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Generates Pydantic models from OpenAPI schema components.
+
+    This function iterates over the 'components' section of an OpenAPI specification,
+    extracting schema definitions and generating Pydantic models for each schema using
+    the `pydantic.create_model` function. Each model corresponds to an OpenAPI schema
+    and includes fields with types, descriptions, and required status derived from the
+    schema's properties.
+
+    Args:
+        spec (Dict[str, Any]): The OpenAPI specification containing component schemas.
+
+    Returns:
+        Dict[str, Any]: A dictionary mapping each component name to its corresponding
+        Pydantic model class.
+    """
+    component_classes = {}
+    components = {}
+
+    for key in spec['components']['schemas'].keys():
+        component = spec['components']['schemas'][key]
+        properties = component['properties']
+        required = component['required'] if 'required' in component else []
+
+        fields = []
+
+        for prop_key, prop_value in properties.items():
+
+            prop_description = prop_value['description'] if 'description' in prop_value else "-"
+            prop_types = []
+
+            if 'type' in prop_value:
+                prop_types.append(prop_value['type'])
+
+            if 'anyOf' in prop_value:
+                any_of = prop_value['anyOf']
+                for any_of_item in any_of:
+                    prop_types.append(any_of_item['type'])
+
+            field = {
+                "name": prop_key,
+                "type": _openapi_to_python_type(prop_types),
+                "description": prop_description,
+                "required": prop_key in required,
+            }
+            fields.append(field)
+
+        components[key] = fields
+
+    for component_name, fields in components.items():
+        class_fields = {}
+
+        for field in fields:
+            class_fields[field['name']] = (field['type'], field['description'])
+
+        component_classes[component_name] = create_model(
+            component_name,
+            __base__=BaseModel,
+            **class_fields
+        )
+
+    return component_classes
 
 
 def _build_function(
@@ -23,6 +119,7 @@ def _build_function(
     method: str,
     query_params: List[str],
     path_params: List[str],
+    body_params: List[str],
     func_name: str,
     doc: str,
     has_body: bool,
@@ -36,6 +133,7 @@ def _build_function(
         method (str): HTTP method for the request (e.g., 'GET', 'POST').
         query_params (List[str]): Names of allowed query parameters.
         path_params (List[str]): Names of required path parameters.
+        body_params (List[str]): Names of allowed body parameters.
         func_name (str): Name to assign to the generated function.
         doc (str): Description to set as the function's docstring.
         has_body (bool): Whether the endpoint accepts a JSON body.
@@ -64,6 +162,8 @@ def _build_function(
 
         params = {k: kwargs.pop(k) for k in query_params if kwargs.get(k) is not None} or None
         body = kwargs.pop('body', None) if has_body else None
+
+        print(params)
 
         response = requests.request(method, url, params=params, json=body, timeout=30)
         response.raise_for_status()
@@ -113,6 +213,7 @@ def generate_tools(
 
             path_params: List[str] = []
             query_params: List[str] = []
+            body_params: List[str] = []
             py_args: List[str] = []
 
             # Define path and query params
@@ -128,9 +229,29 @@ def generate_tools(
 
             has_body = (method_name in ['post', 'put']) and ('requestBody' in method_spec)
 
+            
             # Request body
             if has_body:
                 py_args.append('body')
+                ref = method_spec['requestBody']['content']['application/json']['schema']['$ref']
+                ref_name = ref.removeprefix("#/components/schemas/")
+                ref_schema = spec['components']['schemas'][ref_name]
+                ref_properties = ref_schema['properties']
+
+                print("----------------------------------------------\n")
+                print(ref_properties)
+                print("\n")
+                keys = list(ref_properties.keys())
+
+                for key in keys:
+                    values = ref_properties[key]
+                    print(f"name: {key}")
+                    print(f"type: {values['type'] if 'type' in values else None}")
+                    print(f"description: {values['description'] if 'description' in values else None}")
+                    print(f"default: {values['default'] if 'default' in values else None}")
+                    print("\n")
+
+                print("\n")
 
             func = _build_function(
                 base_url=base_url,
@@ -138,6 +259,7 @@ def generate_tools(
                 method=method,
                 query_params=query_params,
                 path_params=path_params,
+                body_params=body_params,
                 func_name=func_name,
                 doc=method_spec.get("description"),
                 has_body=has_body,
