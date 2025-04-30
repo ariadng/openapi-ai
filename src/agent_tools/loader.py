@@ -58,6 +58,6 @@ def to_snake(name: str, remove_prefix: str = '') -> str:
         name = name[len(remove_prefix):]
 
     name = name.strip('/')
-
+    name = re.sub(r'\{[^}]*\}', '', name)
     s = re.sub(r'[^0-9a-zA-Z]+', '_', name)
     return s.strip('_').lower()
