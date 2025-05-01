@@ -1,6 +1,6 @@
-# OpenAPI LLM Tools
+# OpenAPI AI Agent Tools Generator
 
-Generate function tools from OpenAPI server that can be used with LLM AI agents.
+Generate function tools from OpenAPI server that can be used with LLM AI agents at runtime.
 
 ## Project Checklist
 
@@ -13,13 +13,13 @@ Generate function tools from OpenAPI server that can be used with LLM AI agents.
 ## Installation
 
 ```bash
-pip install openapi-llm-tools
+pip install openapi-ai
 ```
 
 ## Usage
 
 ```python
-from agent_tools import generate_tools
+from openapi_ai import generate_tools
 
 spec = load_spec('https://api.example.com/openapi.json')
 
