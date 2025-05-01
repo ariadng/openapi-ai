@@ -1,6 +1,8 @@
 # OpenAPI AI Agent Tools Generator
 
-Generate function tools from OpenAPI server that can be used with LLM AI agents at runtime.
+Helps your AI agents to connect to, talk to, and consume existing web REST API endpoints built with [OpenAPI standard](https://www.openapis.org/).
+
+![OpenAPI AI](https://yvkbpmmzjmfqjxusmyop.supabase.co/storage/v1/object/public/github//openapi_ai.png)
 
 ## Project Checklist
 
