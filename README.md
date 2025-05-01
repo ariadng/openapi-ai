@@ -30,6 +30,10 @@ When building an AI agent that needs to use web APIs, developers typically write
 
 Sometimes, older company systems don't have modern APIs that AI agents can easily use. A common approach is to build a simpler, modern API "wrapper" around the old system and describe this wrapper using OpenAPI. **OpenAPI AI** library can then read the wrapper's OpenAPI description and generate functions for it, providing a way for an AI agent to communicate with the underlying legacy system indirectly.
 
+## Roadmap
+
+![Version 1.0 Roadmap](https://yvkbpmmzjmfqjxusmyop.supabase.co/storage/v1/object/public/profile-pictures//OpenAPI-AI_v1.0.png)
+
 ## Project Checklist
 
 - ✅ Generate python functions from OpenAPI server endpoints
