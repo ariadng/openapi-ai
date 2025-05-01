@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import types
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 from urllib.parse import urljoin
 
 from pydantic import BaseModel, Field, create_model
@@ -17,10 +17,29 @@ import requests
 from .loader import load_spec, to_snake
 
 def _openapi_to_python_type(openapi_types: List[str]) -> str:
-    # if no types provided, fallback to Any
+    """
+    Maps OpenAPI types to Python type annotations.
+
+    Given a list of OpenAPI types, returns a string representing the corresponding Python type annotation.
+    If no types are provided, the function returns 'Any'.
+    For each type in the list, the function maps it to a Python type annotation using the following mapping:
+    - string: str
+    - integer: int
+    - number: float
+    - boolean: bool
+    - array: List[Any]
+    - object: Dict[str, Any]
+    - null: None
+    If the OpenAPI type is not found in the mapping, the function returns 'Any'.
+    The function then removes duplicates from the list of Python types while preserving order.
+    If the resulting list is empty, the function returns 'Any'.
+    If the list contains only one type, the function returns that type.
+    Otherwise, the function returns a Union type containing all the types in the list.
+    """
+    # If no types provided, fallback to Any
     if not openapi_types:
         return "Any"
-    # map OpenAPI types to Python type annotations
+    # Map OpenAPI types to Python type annotations
     type_map = {
         "string": "str",
         "integer": "int",
@@ -33,12 +52,12 @@ def _openapi_to_python_type(openapi_types: List[str]) -> str:
     python_types = []
     for t in openapi_types:
         python_types.append(type_map.get(t, "Any"))
-    # remove duplicates while preserving order
+    # Remove duplicates while preserving order
     unique_types = []
     for t in python_types:
         if t not in unique_types:
             unique_types.append(t)
-    # if mapping produced no types, fallback to Any
+    # If mapping produced no types, fallback to Any
     if not unique_types:
         return "Any"
 
@@ -48,7 +67,7 @@ def _openapi_to_python_type(openapi_types: List[str]) -> str:
     return f"Union[{', '.join(unique_types)}]"
 
 
-def generate_components(spec: Dict[str, Any]) -> Dict[str, Any]:
+def _generate_components(spec: Dict[str, Any]) -> Dict[str, type[BaseModel]]:
     """
     Generates Pydantic models from OpenAPI schema components.
 
@@ -102,13 +121,19 @@ def generate_components(spec: Dict[str, Any]) -> Dict[str, Any]:
         class_fields = {}
 
         for field in fields:
-            class_fields[field['name']] = (field['type'], field['description'])
+            if field["required"]:
+                default = ...
+            else:
+                default = None
+            class_fields[field['name']] = (field['type'], Field(default=default, description=field['description']))
 
-        component_classes[component_name] = create_model(
+        model = create_model(
             component_name,
             __base__=BaseModel,
             **class_fields
         )
+        model.model_rebuild()
+        component_classes[component_name] = model
 
     return component_classes
 
@@ -119,7 +144,7 @@ def _build_function(
     method: str,
     query_params: List[str],
     path_params: List[str],
-    body_params: List[str],
+    body_model: type[BaseModel],
     func_name: str,
     doc: str,
     has_body: bool,
@@ -133,7 +158,7 @@ def _build_function(
         method (str): HTTP method for the request (e.g., 'GET', 'POST').
         query_params (List[str]): Names of allowed query parameters.
         path_params (List[str]): Names of required path parameters.
-        body_params (List[str]): Names of allowed body parameters.
+        body_model (type[BaseModel]): Pydantic model for the request body.
         func_name (str): Name to assign to the generated function.
         doc (str): Description to set as the function's docstring.
         has_body (bool): Whether the endpoint accepts a JSON body.
@@ -158,12 +183,20 @@ def _build_function(
         if not base.endswith("/"):
             base += "/"
 
+        for arg in kwargs:
+            print(arg)
+        
         url = urljoin(base, path.format(**{k: kwargs.pop(k) for k in path_params}))
+
 
         params = {k: kwargs.pop(k) for k in query_params if kwargs.get(k) is not None} or None
         body = kwargs.pop('body', None) if has_body else None
 
-        print(params)
+        if body_model:
+            body_fields = body_model.model_fields
+        else:
+            body_fields = {}
+
 
         response = requests.request(method, url, params=params, json=body, timeout=30)
         response.raise_for_status()
@@ -176,6 +209,7 @@ def _build_function(
 
 def generate_tools(
     spec_src: str | Path,
+    removeprefix: str | None = None,
 ) -> types.SimpleNamespace:
     """
     Generate a namespace of Python callables for all endpoints in an OpenAPI spec.
@@ -195,10 +229,11 @@ def generate_tools(
     namespace = types.SimpleNamespace()
     spec = load_spec(spec_src)
     base_url = str(spec_src).removesuffix("/openapi.json")
+    components = _generate_components(spec)
 
     # Iterate through paths
     for path, methods in spec['paths'].items():
-        func_path = to_snake(path, "/api/v1")
+        func_path = to_snake(path, removeprefix) if removeprefix else to_snake(path)
 
         # Iterate through methods in each path
         for method, method_spec in methods.items():
@@ -213,7 +248,7 @@ def generate_tools(
 
             path_params: List[str] = []
             query_params: List[str] = []
-            body_params: List[str] = []
+            body_model = None
             py_args: List[str] = []
 
             # Define path and query params
@@ -229,29 +264,12 @@ def generate_tools(
 
             has_body = (method_name in ['post', 'put']) and ('requestBody' in method_spec)
 
-            
             # Request body
             if has_body:
                 py_args.append('body')
                 ref = method_spec['requestBody']['content']['application/json']['schema']['$ref']
                 ref_name = ref.removeprefix("#/components/schemas/")
-                ref_schema = spec['components']['schemas'][ref_name]
-                ref_properties = ref_schema['properties']
-
-                print("----------------------------------------------\n")
-                print(ref_properties)
-                print("\n")
-                keys = list(ref_properties.keys())
-
-                for key in keys:
-                    values = ref_properties[key]
-                    print(f"name: {key}")
-                    print(f"type: {values['type'] if 'type' in values else None}")
-                    print(f"description: {values['description'] if 'description' in values else None}")
-                    print(f"default: {values['default'] if 'default' in values else None}")
-                    print("\n")
-
-                print("\n")
+                body_model = components[ref_name]
 
             func = _build_function(
                 base_url=base_url,
@@ -259,7 +277,7 @@ def generate_tools(
                 method=method,
                 query_params=query_params,
                 path_params=path_params,
-                body_params=body_params,
+                body_model=body_model,
                 func_name=func_name,
                 doc=method_spec.get("description"),
                 has_body=has_body,
