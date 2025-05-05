@@ -4,6 +4,33 @@ This is a Python library that helps AI agents to connect to, talk to, and consum
 
 ![OpenAPI AI](https://yvkbpmmzjmfqjxusmyop.supabase.co/storage/v1/object/public/github//openapi_ai.png)
 
+## Usage
+
+First, you need to install the package:
+
+```bash
+pip install openapi-ai
+```
+
+In this example, we will be using [this server](https://github.com/ariadng/metatrader-mcp-server) that is running at localhost.
+
+```python
+from openapi_ai import generate_tools
+from agents import Agent, Runner
+
+tools = generate_tools('http://localhost:8000/openapi.json')
+
+agent = Agent(
+  name="Assistant",
+  instructions="You are a helpful trading assistant",
+  tools=tools,
+)
+
+result = Runner.run_sync(agent, "What is my current account balance?")
+print(result.final_output)
+
+```
+
 ## Use Cases
 
 ### 1. Enterprise Automation & Internal Tools Integration
@@ -37,27 +64,11 @@ Sometimes, older company systems don't have modern APIs that AI agents can easil
 ## Project Checklist
 
 - ✅ Generate python functions from OpenAPI server endpoints
+- ✅ Integrate Pydantic
 - Generate function tools for OpenAPI Agent SDK
 - Generate function tools for Google ADK
-- Integrate Pydantic
 - Support for endpoints with multiple path parameters
 - Authentication
-
-## Installation
-
-```bash
-pip install openapi-ai
-```
-
-## Usage
-
-```python
-from openapi_ai import generate_tools
-
-spec = load_spec('https://api.example.com/openapi.json')
-
-generate_tools(spec)
-```
 
 ## License
 
