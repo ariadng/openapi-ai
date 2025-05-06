@@ -2,11 +2,12 @@
 Functions generator for OpenAPI endpoints.
 
 This module provides functions to generate Python callables for all endpoints in an OpenAPI spec.
+It converts OpenAPI endpoint definitions into callable Python functions that handle parameter
+validation, request formatting, and response processing.
 """
 
 from __future__ import annotations
 
-import types
 from pathlib import Path
 from typing import List, Dict, Any, Union
 from urllib.parse import urljoin
@@ -26,7 +27,23 @@ def _build_function(
     body_params: dict,
     func_name: str,
     doc: str,
-):
+) -> callable:
+    """
+    Build a callable function for an OpenAPI endpoint.
+    
+    Args:
+        base_url: The base URL for the API.
+        path: The endpoint path, may contain path parameters.
+        method: The HTTP method (GET, POST, PUT, DELETE, etc.).
+        query_params: Dictionary of query parameters and their schemas.
+        path_params: Dictionary of path parameters and their schemas.
+        body_params: Dictionary of body parameters and their schemas.
+        func_name: Name to assign to the generated function.
+        doc: Documentation string for the function.
+        
+    Returns:
+        A callable function that makes requests to the specified endpoint.
+    """
    
     def _endpoint_function(*, base_url: str = base_url, **kwargs):
         """
@@ -106,9 +123,23 @@ def _build_function(
 def generate_tools(
     spec_src: str | Path,
     removeprefix: str | None = None,
-) -> types.SimpleNamespace:
+) -> dict:
+    """
+    Generate callable tools from an OpenAPI specification.
+    
+    This function parses an OpenAPI specification and creates callable functions
+    for each endpoint. The functions are attached to a SimpleNamespace object
+    and returned.
+    
+    Args:
+        spec_src: Path or URL to the OpenAPI specification file.
+        removeprefix: Optional prefix to remove from endpoint paths when generating function names.
+        
+    Returns:
+        A dict object containing callable functions for each endpoint.
+    """
 
-    namespace = types.SimpleNamespace()
+    functions = {}
     endpoints = list_endpoints(spec_src)
     base_url = str(spec_src).removesuffix("/openapi.json")
 
@@ -133,6 +164,6 @@ def generate_tools(
             func_name=func_name,
             doc=endpoint['description'],
         )
-        setattr(namespace, func_name, func)
+        functions[func_name] = func
 
-    return namespace
+    return functions
