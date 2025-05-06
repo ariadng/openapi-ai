@@ -15,19 +15,41 @@ pip install openapi-ai
 In this example, we will be using [this server](https://github.com/ariadng/metatrader-mcp-server) that is running at localhost.
 
 ```python
-from openapi_ai import generate_tools
+import os
+import asyncio
+from dotenv import load_dotenv
 from agents import Agent, Runner
+from openapi_ai import OpenAPITools
 
-tools = generate_tools('http://localhost:8000/openapi.json')
+load_dotenv()
 
-agent = Agent(
-  name="Assistant",
-  instructions="You are a helpful trading assistant",
-  tools=tools,
-)
+async def main():
+    tools = OpenAPITools("http://localhost:8000/openapi.json", remove_prefix="/api/v1")
 
-result = Runner.run_sync(agent, "What is my current account balance?")
-print(result.final_output)
+    agent = Agent(
+        name="Haiku trading agent",
+        instructions="You are a trading assistant. Always answer in haiku form.",
+        model="gpt-4o",
+        tools=tools.get_openai_tools(),
+    )
+
+    result = await Runner.run(agent, "What is my current account info?")
+    print(result.final_output)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
+"""
+Example output:
+
+Real account holds much,  
+Balance strong in dollars vast,  
+Equity shines bright.  
+
+Leverage set high,  
+Profit flows, free margin wide,  
+In currency's might.
+"""
 
 ```
 
@@ -65,7 +87,7 @@ Sometimes, older company systems don't have modern APIs that AI agents can easil
 
 - ✅ Generate python functions from OpenAPI server endpoints
 - ✅ Integrate Pydantic
-- Generate function tools for OpenAPI Agent SDK
+- ✅ Generate function tools for OpenAI Agent SDK
 - Generate function tools for Google ADK
 - Support for endpoints with multiple path parameters
 - Authentication

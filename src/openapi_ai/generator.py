@@ -27,7 +27,7 @@ def _build_function(
     body_params: dict,
     func_name: str,
     doc: str,
-) -> callable:
+) -> dict:
     """
     Build a callable function for an OpenAPI endpoint.
     
@@ -42,8 +42,32 @@ def _build_function(
         doc: Documentation string for the function.
         
     Returns:
-        A callable function that makes requests to the specified endpoint.
+        A dictionary containing the callable function and the Pydantic model for parameter validation.
     """
+    # Create a dynamic Pydantic model for parameter validation
+    fields = {}
+    
+    # Add path parameters to the model
+    for param in path_params:
+        fields[param] = (str, ...)  # Path params are required
+        
+    # Add query parameters to the model
+    for param, schema in query_params.items():
+        # Query params are optional by default
+        fields[param] = (schema.get('type', Any), None)
+        
+    # Add body parameters if they exist
+    has_body = len(body_params.keys()) > 0
+    if has_body:
+        # If body is directly passed, it should be validated separately
+        # Otherwise, include body params in the model
+        for param, schema in body_params.items():
+            required = schema.get('required', False)
+            param_type = schema.get('type', Any)
+            fields[param] = (param_type, ... if required else None)
+    
+    # Create the model for parameter validation
+    EndpointParams = create_model('EndpointParams', **fields)
    
     def _endpoint_function(*, base_url: str = base_url, **kwargs):
         """
@@ -56,32 +80,8 @@ def _build_function(
         The function returns the response JSON, after raising an exception if the
         request was not successful.
         """
-        # Create a dynamic Pydantic model for parameter validation
-        fields = {}
-        
-        # Add path parameters to the model
-        for param in path_params:
-            fields[param] = (str, ...)  # Path params are required
-            
-        # Add query parameters to the model
-        for param, schema in query_params.items():
-            # Query params are optional by default
-            fields[param] = (schema.get('type', Any), None)
-            
-        # Add body parameters if they exist
-        has_body = len(body_params.keys()) > 0
-        if has_body:
-            # If body is directly passed, it should be validated separately
-            # Otherwise, include body params in the model
-            if 'body' not in kwargs:
-                for param, schema in body_params.items():
-                    required = schema.get('required', False)
-                    param_type = schema.get('type', Any)
-                    fields[param] = (param_type, ... if required else None)
-        
-        # Create the model and validate input
-        EndpointParams = create_model('EndpointParams', **fields)
         try:
+            # Use the model created in _build_function to validate input
             validated_params = EndpointParams(**kwargs).dict(exclude_none=True)
         except Exception as e:
             return {"error": True, "message": str(e)}
@@ -117,7 +117,10 @@ def _build_function(
 
     _endpoint_function.__name__ = func_name
     _endpoint_function.__doc__ = doc or ""
-    return _endpoint_function
+    return {
+        "func": _endpoint_function,
+        "model": EndpointParams,
+    }
 
 
 def generate_tools(
@@ -164,6 +167,11 @@ def generate_tools(
             func_name=func_name,
             doc=endpoint['description'],
         )
-        functions[func_name] = func
+        functions[func_name] = {
+            "name": func_name,
+            "description": endpoint['description'],
+            "func": func["func"],
+            "model": func["model"],
+        }
 
     return functions
