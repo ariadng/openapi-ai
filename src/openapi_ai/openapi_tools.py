@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Dict, List, Callable, Tuple
 from agents import RunContextWrapper, FunctionTool
 from .generator import generate_tools
 
@@ -35,22 +35,35 @@ class OpenAPITools:
         self._remove_prefix = remove_prefix
         self._functions = generate_tools(url, remove_prefix)
 
-    def get_function_tools(self) -> dict:
+    def get_function_tools(self) -> Dict[str, Callable]:
         """
-        Return a dictionary of all the generated endpoint functions.
+        Return a dictionary of callable functions for all the generated endpoint functions.
 
-        The returned dictionary has the function names as keys and the
-        dictionaries returned by the generator as values. Each dictionary
-        contains the function itself, the Pydantic model for parameter validation,
-        and a description string.
-
-        The purpose of this function is to allow the caller to inspect or
-        modify the generated functions.
+        The returned dictionary has the function names as keys and the callable functions
+        as values. Each function is ready to be used directly in Python code.
 
         Returns:
-            dict: A dictionary of all the generated endpoint functions.
+            Dict[str, Callable]: A dictionary of callable functions for all endpoints.
         """
-        return self._functions
+        function_tools = {}
+        for func_name, item in self._functions.items():
+            function_tools[func_name] = item["func"]
+        return function_tools
+        
+    def get_function_list(self) -> List[Tuple[str, str]]:
+        """
+        Return a list of function names and their descriptions.
+        
+        Each item in the list is a tuple containing the function name and its description,
+        similar to a docstring.
+        
+        Returns:
+            List[Tuple[str, str]]: A list of tuples containing function names and descriptions.
+        """
+        function_list = []
+        for func_name, item in self._functions.items():
+            function_list.append((func_name, item["description"]))
+        return function_list
     
     def get_openai_tools(self) -> list[FunctionTool]:
         """
