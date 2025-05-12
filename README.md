@@ -53,6 +53,55 @@ In currency's might.
 
 ```
 
+### Using Function Tools Directly in Python
+
+In addition to generating tools for AI agents, you can also use the generated functions directly in your Python code:
+
+```python
+import os
+from dotenv import load_dotenv
+from openapi_ai import OpenAPITools
+
+load_dotenv()
+
+# Initialize the OpenAPI tools
+tools = OpenAPITools("http://localhost:8000/openapi.json", remove_prefix="/api/v1")
+
+# Get a dictionary of callable functions
+functions = tools.get_function_tools()
+
+# Now you can use these functions directly
+account_info = functions["get_account_info"]()
+print(f"Account balance: {account_info['balance']}")
+
+# Get positions with specific parameters
+positions = functions["get_positions"](symbol="EURUSD")
+for position in positions:
+    print(f"Position: {position['symbol']} - {position['type']} - {position['volume']}")
+```
+
+### Listing Available Functions and Their Descriptions
+
+You can also get a list of all available functions and their descriptions:
+
+```python
+from openapi_ai import OpenAPITools
+
+# Initialize the OpenAPI tools
+tools = OpenAPITools("http://localhost:8000/openapi.json", remove_prefix="/api/v1")
+
+# Get a list of function names and descriptions
+function_list = tools.get_function_list()
+
+# Print all available functions with their descriptions
+print("Available API Functions:")
+print("-" * 50)
+for name, description in function_list:
+    print(f"Function: {name}")
+    print(f"Description: {description}")
+    print("-" * 50)
+```
+
 ## Use Cases
 
 ### 1. Enterprise Automation & Internal Tools Integration
